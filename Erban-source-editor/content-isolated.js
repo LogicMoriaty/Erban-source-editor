@@ -31,6 +31,7 @@
   var lastSavedContent = '';
   var pendingRequests = {};
   var buttonInjected = false;
+  var utils = window.ErbanEditorUtils || {};
 
   // Expose handlers on window for inline onclick (more robust than addEventListener)
   function exposeHandlers() {
@@ -433,6 +434,14 @@
   }
 
   function toggleEditor() { isDialogOpen ? closeEditor() : openEditor(); }
+
+  window.addEventListener('keydown', function (e) {
+    if (utils.isToggleShortcut && utils.isToggleShortcut(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleEditor();
+    }
+  }, true);
 
   // ============================================================
   //  Toast
