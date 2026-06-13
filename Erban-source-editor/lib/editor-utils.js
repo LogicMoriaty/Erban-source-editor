@@ -27,8 +27,151 @@
     return /\.(html|htm|txt)$/.test(name);
   }
 
+  var VOID_TAGS = {
+    area: true,
+    base: true,
+    br: true,
+    col: true,
+    embed: true,
+    hr: true,
+    img: true,
+    input: true,
+    link: true,
+    meta: true,
+    param: true,
+    source: true,
+    track: true,
+    wbr: true
+  };
+
+  function findTagEnd(html, start) {
+    var quote = '';
+    for (var i = start + 1; i < html.length; i++) {
+      var ch = html.charAt(i);
+      if (quote) {
+        if (ch === quote) quote = '';
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === '>') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function tokenizeHTML(html) {
+    var value = String(html || '');
+    var tokens = [];
+    var i = 0;
+
+    while (i < value.length) {
+      if (value.charAt(i) === '<') {
+        var end = findTagEnd(value, i);
+        if (end === -1) {
+          tokens.push({ type: 'text', value: value.slice(i) });
+          break;
+        }
+        tokens.push({ type: 'tag', value: value.slice(i, end + 1) });
+        i = end + 1;
+      } else {
+        var next = value.indexOf('<', i);
+        if (next === -1) next = value.length;
+        tokens.push({ type: 'text', value: value.slice(i, next) });
+        i = next;
+      }
+    }
+
+    return tokens;
+  }
+
+  function tagInfo(tag) {
+    var text = String(tag || '').trim();
+    if (!text || /^<!--/.test(text) || /^<!/i.test(text) || /^<\?/.test(text)) {
+      return { kind: 'special', name: '' };
+    }
+
+    var closing = text.match(/^<\/\s*([^\s>\/]+)/);
+    if (closing) return { kind: 'close', name: closing[1].toLowerCase() };
+
+    var opening = text.match(/^<\s*([^\s>\/]+)/);
+    if (!opening) return { kind: 'special', name: '' };
+
+    var name = opening[1].toLowerCase();
+    if (/\/\s*>$/.test(text) || VOID_TAGS[name]) return { kind: 'self', name: name };
+    return { kind: 'open', name: name };
+  }
+
+  function previousNonWhitespace(tokens, index) {
+    for (var i = index - 1; i >= 0; i--) {
+      if (tokens[i].type !== 'text' || /\S/.test(tokens[i].value)) return tokens[i];
+    }
+    return null;
+  }
+
+  function nextNonWhitespace(tokens, index) {
+    for (var i = index + 1; i < tokens.length; i++) {
+      if (tokens[i].type !== 'text' || /\S/.test(tokens[i].value)) return tokens[i];
+    }
+    return null;
+  }
+
+  function formatSourceHTML(html) {
+    var tokens = tokenizeHTML(html);
+    var lines = [];
+    var current = [];
+    var previousKept = null;
+
+    for (var i = 0; i < tokens.length; i++) {
+      var token = tokens[i];
+      if (token.type === 'text' && !/\S/.test(token.value)) {
+        var prev = previousNonWhitespace(tokens, i);
+        var next = nextNonWhitespace(tokens, i);
+        if (prev && prev.type === 'tag' && next && next.type === 'tag') continue;
+      }
+
+      if (token.type === 'tag' && previousKept && previousKept.type === 'tag' && current.length) {
+        lines.push(current);
+        current = [];
+      }
+
+      current.push(token);
+      previousKept = token;
+    }
+
+    if (current.length) lines.push(current);
+
+    var indent = 0;
+    var result = [];
+    for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      var lineTokens = lines[lineIndex];
+      var firstTagInfo = null;
+      var netIndent = 0;
+      var text = '';
+
+      for (var j = 0; j < lineTokens.length; j++) {
+        var lineToken = lineTokens[j];
+        text += lineToken.value;
+        if (lineToken.type !== 'tag') continue;
+
+        var info = tagInfo(lineToken.value);
+        if (!firstTagInfo) firstTagInfo = info;
+        if (info.kind === 'open') netIndent++;
+        if (info.kind === 'close') netIndent--;
+      }
+
+      text = text.trim();
+      if (!text) continue;
+
+      var lineIndent = firstTagInfo && firstTagInfo.kind === 'close' ? Math.max(indent - 1, 0) : indent;
+      result.push(new Array(lineIndent + 1).join('  ') + text);
+      indent = Math.max(indent + netIndent, 0);
+    }
+
+    return result.join('\n');
+  }
+
   function prepareLoadedHTML(html) {
-    return String(html || '');
+    return formatSourceHTML(html);
   }
 
   function getInlineStyleValue(styleText, propName) {
@@ -120,6 +263,7 @@
   }
 
   return {
+    formatSourceHTML: formatSourceHTML,
     isToggleShortcut: isToggleShortcut,
     isSupportedImportFile: isSupportedImportFile,
     mergeParagraphStyle: mergeParagraphStyle,

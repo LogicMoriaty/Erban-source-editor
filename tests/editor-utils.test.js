@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const {
+  formatSourceHTML,
   isToggleShortcut,
   isSupportedImportFile,
   mergeParagraphStyle,
@@ -41,11 +42,33 @@ test('accepts html, htm, and txt files for import', () => {
   assert.equal(isSupportedImportFile({ name: 'image.png' }), false);
 });
 
-test('keeps loaded editor html unchanged until the user explicitly formats it', () => {
-  const raw = '<p style="line-height:2.5;text-align:center"><span>你相信吗 ?</span></p>\n<section data-pm-slice="1 1 []">正文</section>';
+function stripFormattingWhitespace(html) {
+  return html.replace(/>\s+</g, '><').trim();
+}
 
-  assert.equal(prepareLoadedHTML(raw), raw);
-  assert.match(prepareLoadedHTML(raw), /line-height:2\.5/);
+test('formats loaded editor html with indentation without changing layout markup', () => {
+  const raw = '<section data-pm-slice="1 1 []"><p style="line-height:2.5;text-align:center"><span style="-webkit-tap-highlight-color: transparent;">你相信吗 ?</span><img class="rich_pages wxw-img" data-croporisrc="https://example.com/original.png" data-src="https://example.com/rendered.png"></p></section>';
+  const result = prepareLoadedHTML(raw);
+
+  assert.match(result, /\n  <p/);
+  assert.match(result, /\n    <span/);
+  assert.equal(stripFormattingWhitespace(result), raw);
+  assert.match(result, /style="line-height:2\.5;text-align:center"/);
+  assert.match(result, /data-pm-slice="1 1 \[\]"/);
+  assert.match(result, /data-croporisrc="https:\/\/example\.com\/original\.png"/);
+  assert.doesNotMatch(result, /font-size:\s*16px/);
+  assert.doesNotMatch(result, /line-height:\s*1\.75/);
+});
+
+test('source formatter preserves horizontal swipe containers and image attributes', () => {
+  const raw = '<section style="display:flex;width:200%;overflow-x:auto"><section style="width:50%;flex-shrink:0"><img data-src="https://example.com/one.png" data-backw="500"></section><section style="width:50%;flex-shrink:0"><img data-src="https://example.com/two.png" data-backh="600"></section></section>';
+  const result = formatSourceHTML(raw);
+
+  assert.match(result, /\n  <section style="width:50%;flex-shrink:0">/);
+  assert.equal(stripFormattingWhitespace(result), raw);
+  assert.match(result, /style="display:flex;width:200%;overflow-x:auto"/);
+  assert.match(result, /data-backw="500"/);
+  assert.match(result, /data-backh="600"/);
 });
 
 test('prepares preview html by removing active content and preserving layout styles', () => {

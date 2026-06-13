@@ -181,123 +181,8 @@
     return root.innerHTML;
   }
 
-  // ============================================================
-  //  HTML Formatting (壹伴-style: semantic cleanup + indent)
-  // ============================================================
-  function mergeParagraphStyle(existingStyle, baseStyle) {
-    return utils.mergeParagraphStyle ? utils.mergeParagraphStyle(existingStyle, baseStyle) : baseStyle;
-  }
-
   function formatHTML(html) {
-    if (!html) return '';
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(html, 'text/html');
-
-    // --- Pass 1: Walk all <p> elements and apply formatting rules ---
-    var allP = doc.querySelectorAll('p');
-    for (var i = 0; i < allP.length; i++) {
-      var p = allP[i];
-      var text = (p.textContent || '').trim();
-
-      // Skip hidden elements
-      if (p.style && p.style.display === 'none') continue;
-
-      // Is this a spacing paragraph? (<br> only, or empty)
-      var hasOnlyBr = (p.children.length === 0 || (p.children.length === 1 && p.children[0].tagName === 'BR')) && text === '';
-      var isSpacing = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '<span leaf=""><br></span>' || hasOnlyBr;
-
-      // Is this a caption? (starts with ▲)
-      var isCaption = /^▲/.test(text);
-
-      // Is this inside a image wrapper? (contains <img>)
-      var hasImg = p.querySelector('img');
-
-      if (isSpacing) {
-        p.setAttribute('style', mergeParagraphStyle(p.getAttribute('style'), 'margin:0;font-size:16px;line-height:1.75;'));
-        p.innerHTML = '<br>';
-      } else if (isCaption) {
-        p.setAttribute('style', mergeParagraphStyle(p.getAttribute('style'), 'margin:0;font-size:14px;color:#888;line-height:1.75;'));
-      } else if (hasImg) {
-        // Keep image paragraphs mostly intact, just add basic styling
-        var s = p.getAttribute('style') || '';
-        s = s.replace(/font-size:[^;"]+;?/g, '');
-        s += ';margin:0;font-size:16px;line-height:1.75;';
-        p.setAttribute('style', s.replace(/^;|;$/g, ''));
-      } else {
-        // Body paragraph - clean and set 16px
-        p.setAttribute('style', mergeParagraphStyle(p.getAttribute('style'), 'margin:0;font-size:16px;line-height:1.75;'));
-      }
-    }
-
-    // --- Pass 2: Clean up <span> elements ---
-    var allSpans = doc.querySelectorAll('span');
-    for (var j = 0; j < allSpans.length; j++) {
-      var sp = allSpans[j];
-      // Remove debug data attributes
-      sp.removeAttribute('data-pm-slice');
-      // Remove webkit nonsense
-      if (sp.style) {
-        sp.style.removeProperty('-webkit-tap-highlight-color');
-        sp.style.removeProperty('outline');
-        sp.style.removeProperty('max-width');
-        sp.style.removeProperty('overflow-wrap');
-        sp.style.removeProperty('font-family');
-      }
-    }
-
-    // --- Pass 3: Clean up <section> elements ---
-    var allSections = doc.querySelectorAll('section');
-    for (var k = 0; k < allSections.length; k++) {
-      var sec = allSections[k];
-      sec.removeAttribute('data-pm-slice');
-      if (sec.style) {
-        sec.style.removeProperty('box-sizing');
-      }
-    }
-
-    // --- Pass 4: Clean junk from <img> elements ---
-    var allImgs = doc.querySelectorAll('img');
-    for (var m = 0; m < allImgs.length; m++) {
-      var img = allImgs[m];
-      img.removeAttribute('data-croporisrc');
-      img.removeAttribute('data-cropx2');
-      img.removeAttribute('data-cropy2');
-      img.removeAttribute('data-cropselx1');
-      img.removeAttribute('data-cropselx2');
-      img.removeAttribute('data-cropsely1');
-      img.removeAttribute('data-cropsely2');
-      img.removeAttribute('data-imgqrcoded');
-      img.removeAttribute('data-imgfileid');
-      img.removeAttribute('data-backw');
-      img.removeAttribute('data-backh');
-    }
-
-    // --- Serialize with indentation ---
-    var html = doc.body.innerHTML;
-
-    // Add newlines at logical break points
-    html = html.replace(/><(section|p|div|h[1-6]|ul|ol|li|table|tr|img|hr|blockquote|figure)/g, '>\n<$1');
-    html = html.replace(/<\/(section|p|div|h[1-6]|ul|ol|li|table|tr|blockquote)>/g, '</$1>\n');
-
-    // Indent based on tag depth
-    var lines = html.split('\n');
-    var indent = 0;
-    for (var n = 0; n < lines.length; n++) {
-      var line = lines[n].trim();
-      if (!line) { lines[n] = ''; continue; }
-
-      // Decrease indent before closing tags
-      if (/^<\//.test(line)) indent = Math.max(0, indent - 1);
-
-      lines[n] = '  '.repeat(indent) + line;
-
-      // Increase indent after opening tags (but not self-closing)
-      if (/^<(section|div|ul|ol|li|table|tr|blockquote|p|h[1-6])\b/.test(line) && !/\/>$/.test(line) && !/<\/\w+>$/.test(line)) {
-        indent++;
-      }
-    }
-
-    return lines.join('\n');
+    return utils.formatSourceHTML ? utils.formatSourceHTML(html) : String(html || '');
   }
 
   // ============================================================
@@ -422,7 +307,7 @@
         lastSavedContent = loaded;
         isDirty = false;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        if (statusEl) { statusEl.textContent = '就绪 — 已读取, ' + loaded.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
+        if (statusEl) { statusEl.textContent = '就绪 — 已格式化, ' + loaded.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
         textarea.focus();
       },
       function (err) {
