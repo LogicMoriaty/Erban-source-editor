@@ -279,7 +279,8 @@
   }
 
   function highlightHTMLSource(html) {
-    var tokens = tokenizeHTML(html);
+    var source = String(html || '');
+    var tokens = tokenizeHTML(source);
     var result = '';
     for (var i = 0; i < tokens.length; i++) {
       if (tokens[i].type === 'tag') {
@@ -287,6 +288,9 @@
       } else {
         result += escapeHTML(tokens[i].value);
       }
+    }
+    if (/(?:\r\n|\r|\n)$/.test(source)) {
+      result += '<span class="wx-src-token-tail">&#8203;</span>';
     }
     return result || '<br>';
   }

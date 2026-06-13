@@ -97,6 +97,12 @@ test('highlights html source while escaping rendered markup', () => {
   assert.doesNotMatch(result, /<section style/);
 });
 
+test('syntax highlight keeps a renderable final line when source ends with newline', () => {
+  assert.doesNotMatch(highlightHTMLSource('first\nsecond'), /wx-src-token-tail/);
+  assert.match(highlightHTMLSource('first\nsecond\n'), /\n<span class="wx-src-token-tail">&#8203;<\/span>$/);
+  assert.match(highlightHTMLSource('<section>done<\/section>\r\n'), /\r\n<span class="wx-src-token-tail">&#8203;<\/span>$/);
+});
+
 test('finds text matches with case sensitivity options', () => {
   assert.deepEqual(findTextMatches('Alpha alpha ALPHA', 'alpha'), [
     { start: 0, end: 5 },

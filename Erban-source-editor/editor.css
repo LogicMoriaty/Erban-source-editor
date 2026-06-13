@@ -406,6 +406,9 @@ div.wx-edit-source-btn[style*="fixed"]:hover {
 .wx-src-token-comment {
   color: #6f7782 !important;
 }
+.wx-src-token-tail {
+  color: transparent !important;
+}
 .wx-src-token-text {
   color: #d4d8df !important;
 }
