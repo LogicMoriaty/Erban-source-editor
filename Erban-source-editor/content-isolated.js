@@ -31,6 +31,7 @@
   var lastSavedContent = '';
   var pendingRequests = {};
   var buttonInjected = false;
+  var utils = window.ErbanEditorUtils || {};
 
   // Expose handlers on window for inline onclick (more robust than addEventListener)
   function exposeHandlers() {
@@ -45,7 +46,10 @@
       var panel = document.getElementById('wsrc-preview-panel');
       var content = document.getElementById('wsrc-preview-content');
       var ta = document.getElementById('wsrc-textarea');
-      if (cb.checked) { if (panel) panel.classList.add('visible'); if (content && ta) content.innerHTML = sanitizeForWeChat(ta.value); }
+      if (cb.checked) {
+        if (panel) panel.classList.add('visible');
+        if (content && ta) content.innerHTML = utils.preparePreviewHTML ? utils.preparePreviewHTML(ta.value) : sanitizeForWeChat(ta.value);
+      }
       else { if (panel) panel.classList.remove('visible'); }
     };
   }
@@ -177,119 +181,8 @@
     return root.innerHTML;
   }
 
-  // ============================================================
-  //  HTML Formatting (壹伴-style: semantic cleanup + indent)
-  // ============================================================
   function formatHTML(html) {
-    if (!html) return '';
-    var parser = new DOMParser();
-    var doc = parser.parseFromString(html, 'text/html');
-
-    // --- Pass 1: Walk all <p> elements and apply formatting rules ---
-    var allP = doc.querySelectorAll('p');
-    for (var i = 0; i < allP.length; i++) {
-      var p = allP[i];
-      var text = (p.textContent || '').trim();
-
-      // Skip hidden elements
-      if (p.style && p.style.display === 'none') continue;
-
-      // Is this a spacing paragraph? (<br> only, or empty)
-      var hasOnlyBr = (p.children.length === 0 || (p.children.length === 1 && p.children[0].tagName === 'BR')) && text === '';
-      var isSpacing = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '<span leaf=""><br></span>' || hasOnlyBr;
-
-      // Is this a caption? (starts with ▲)
-      var isCaption = /^▲/.test(text);
-
-      // Is this inside a image wrapper? (contains <img>)
-      var hasImg = p.querySelector('img');
-
-      if (isSpacing) {
-        p.setAttribute('style', 'margin:0;font-size:16px;line-height:1.75;');
-        p.innerHTML = '<br>';
-      } else if (isCaption) {
-        p.setAttribute('style', 'margin:0;font-size:14px;color:#888;line-height:1.75;');
-      } else if (hasImg) {
-        // Keep image paragraphs mostly intact, just add basic styling
-        var s = p.getAttribute('style') || '';
-        s = s.replace(/font-size:[^;"]+;?/g, '');
-        s += ';margin:0;font-size:16px;line-height:1.75;';
-        p.setAttribute('style', s.replace(/^;|;$/g, ''));
-      } else {
-        // Body paragraph - clean and set 16px
-        p.setAttribute('style', 'margin:0;font-size:16px;line-height:1.75;');
-      }
-    }
-
-    // --- Pass 2: Clean up <span> elements ---
-    var allSpans = doc.querySelectorAll('span');
-    for (var j = 0; j < allSpans.length; j++) {
-      var sp = allSpans[j];
-      // Remove debug data attributes
-      sp.removeAttribute('data-pm-slice');
-      // Remove webkit nonsense
-      if (sp.style) {
-        sp.style.removeProperty('-webkit-tap-highlight-color');
-        sp.style.removeProperty('outline');
-        sp.style.removeProperty('max-width');
-        sp.style.removeProperty('overflow-wrap');
-        sp.style.removeProperty('font-family');
-      }
-    }
-
-    // --- Pass 3: Clean up <section> elements ---
-    var allSections = doc.querySelectorAll('section');
-    for (var k = 0; k < allSections.length; k++) {
-      var sec = allSections[k];
-      sec.removeAttribute('data-pm-slice');
-      if (sec.style) {
-        sec.style.removeProperty('box-sizing');
-      }
-    }
-
-    // --- Pass 4: Clean junk from <img> elements ---
-    var allImgs = doc.querySelectorAll('img');
-    for (var m = 0; m < allImgs.length; m++) {
-      var img = allImgs[m];
-      img.removeAttribute('data-croporisrc');
-      img.removeAttribute('data-cropx2');
-      img.removeAttribute('data-cropy2');
-      img.removeAttribute('data-cropselx1');
-      img.removeAttribute('data-cropselx2');
-      img.removeAttribute('data-cropsely1');
-      img.removeAttribute('data-cropsely2');
-      img.removeAttribute('data-imgqrcoded');
-      img.removeAttribute('data-imgfileid');
-      img.removeAttribute('data-backw');
-      img.removeAttribute('data-backh');
-    }
-
-    // --- Serialize with indentation ---
-    var html = doc.body.innerHTML;
-
-    // Add newlines at logical break points
-    html = html.replace(/><(section|p|div|h[1-6]|ul|ol|li|table|tr|img|hr|blockquote|figure)/g, '>\n<$1');
-    html = html.replace(/<\/(section|p|div|h[1-6]|ul|ol|li|table|tr|blockquote)>/g, '</$1>\n');
-
-    // Indent based on tag depth
-    var lines = html.split('\n');
-    var indent = 0;
-    for (var n = 0; n < lines.length; n++) {
-      var line = lines[n].trim();
-      if (!line) { lines[n] = ''; continue; }
-
-      // Decrease indent before closing tags
-      if (/^<\//.test(line)) indent = Math.max(0, indent - 1);
-
-      lines[n] = '  '.repeat(indent) + line;
-
-      // Increase indent after opening tags (but not self-closing)
-      if (/^<(section|div|ul|ol|li|table|tr|blockquote|p|h[1-6])\b/.test(line) && !/\/>$/.test(line) && !/<\/\w+>$/.test(line)) {
-        indent++;
-      }
-    }
-
-    return lines.join('\n');
+    return utils.formatSourceHTML ? utils.formatSourceHTML(html) : String(html || '');
   }
 
   // ============================================================
@@ -301,8 +194,9 @@
     dialogEl.className = 'wx-source-overlay';
     dialogEl.innerHTML = [
       '<div class="wx-source-dialog">',
-      ' <div class="wx-source-header"><div class="wx-source-header-left"><span class="wx-source-title">贰伴 · HTML 源代码</span></div><div class="wx-source-header-right"><button class="wx-source-btn" id="wsrc-btn-format">格式化</button><label class="wx-source-check-label"><input type="checkbox" id="wsrc-toggle-preview"> 实时预览</label><button class="wx-source-btn-close" id="wsrc-btn-close">&times;</button></div></div>',
-      ' <div class="wx-source-body"><div class="wx-source-code-panel"><div class="wx-source-line-numbers" id="wsrc-line-numbers">1</div><textarea class="wx-source-textarea" id="wsrc-textarea" placeholder="在此编辑 HTML 源代码..." spellcheck="false" wrap="off"></textarea></div><div class="wx-source-preview-panel" id="wsrc-preview-panel"><div class="wx-source-preview-note">注意：实际显示效果以公众号发布为准，部分样式可能在微信客户端中被过滤。</div><div id="wsrc-preview-content"></div></div></div>',
+      ' <div class="wx-source-header"><div class="wx-source-header-left"><span class="wx-source-title">贰伴 · HTML 源代码</span></div><div class="wx-source-header-right"><button class="wx-source-btn" id="wsrc-btn-import">导入 HTML</button><input class="wx-source-file-input" id="wsrc-import-input" type="file" accept=".html,.htm,.txt,text/html,text/plain"><button class="wx-source-btn" id="wsrc-btn-format">格式化</button><label class="wx-source-check-label"><input type="checkbox" id="wsrc-toggle-preview"> 实时预览</label><button class="wx-source-btn-close" id="wsrc-btn-close">&times;</button></div></div>',
+      ' <div class="wx-source-searchbar" id="wsrc-searchbar"><input class="wx-source-search-input" id="wsrc-find-input" type="text" placeholder="查找" autocomplete="off"><span class="wx-source-search-count" id="wsrc-search-count">0/0</span><button class="wx-source-btn wx-source-search-btn" id="wsrc-find-prev" title="上一个">↑</button><button class="wx-source-btn wx-source-search-btn" id="wsrc-find-next" title="下一个">↓</button><input class="wx-source-search-input wx-source-replace-input" id="wsrc-replace-input" type="text" placeholder="替换为" autocomplete="off"><button class="wx-source-btn wx-source-search-btn" id="wsrc-replace-one">替换</button><button class="wx-source-btn wx-source-search-btn" id="wsrc-replace-all">全部</button><label class="wx-source-search-case"><input type="checkbox" id="wsrc-find-case"> Aa</label><button class="wx-source-btn-close" id="wsrc-search-close">&times;</button></div>',
+      ' <div class="wx-source-body"><div class="wx-source-code-panel"><div class="wx-source-line-numbers" id="wsrc-line-numbers">1</div><div class="wx-source-editor-wrap"><pre class="wx-source-highlight" id="wsrc-highlight" aria-hidden="true"></pre><textarea class="wx-source-textarea" id="wsrc-textarea" placeholder="在此编辑 HTML 源代码..." spellcheck="false" wrap="off"></textarea></div></div><div class="wx-source-preview-panel" id="wsrc-preview-panel"><div class="wx-source-preview-note">手机预览按微信公众号正文阅读态模拟，实际发布效果以微信客户端为准。</div><div class="wx-source-preview-stage"><div class="wx-source-phone-frame"><div class="wx-source-preview-content" id="wsrc-preview-content"></div></div></div></div></div>',
       ' <div class="wx-source-footer"><span class="wx-source-status" id="wsrc-status">就绪</span><div class="wx-source-footer-right"><button class="wx-source-btn wx-source-btn-cancel" id="wsrc-btn-cancel">取消</button><button class="wx-source-btn wx-source-btn-apply" id="wsrc-btn-apply">应用</button></div></div>',
       '</div>'
     ].join('');
@@ -316,23 +210,75 @@
     try {
       var textarea = getEl('wsrc-textarea');
       var lineNumbers = getEl('wsrc-line-numbers');
+      var highlightLayer = getEl('wsrc-highlight');
       var previewPanel = getEl('wsrc-preview-panel');
       var previewContent = getEl('wsrc-preview-content');
       var previewToggle = getEl('wsrc-toggle-preview');
       var statusEl = getEl('wsrc-status');
+      var searchBar = getEl('wsrc-searchbar');
+      var findInput = getEl('wsrc-find-input');
+      var replaceInput = getEl('wsrc-replace-input');
+      var searchCount = getEl('wsrc-search-count');
+      var caseToggle = getEl('wsrc-find-case');
+      var searchState = { matches: [], activeIndex: -1 };
 
       // Use .onclick (DOM property, NOT HTML attribute) to bypass WeChat's CSP
       var closeBtn = getEl('wsrc-btn-close');
       var cancelBtn = getEl('wsrc-btn-cancel');
       var applyBtn = getEl('wsrc-btn-apply');
+      var importBtn = getEl('wsrc-btn-import');
+      var importInput = getEl('wsrc-import-input');
       var formatBtn = getEl('wsrc-btn-format');
+      var findPrevBtn = getEl('wsrc-find-prev');
+      var findNextBtn = getEl('wsrc-find-next');
+      var replaceOneBtn = getEl('wsrc-replace-one');
+      var replaceAllBtn = getEl('wsrc-replace-all');
+      var searchCloseBtn = getEl('wsrc-search-close');
 
       if (closeBtn) closeBtn.onclick = function (e) { e.preventDefault(); closeEditor(); };
       if (cancelBtn) cancelBtn.onclick = function (e) { e.preventDefault(); closeEditor(); };
       if (applyBtn) applyBtn.onclick = function (e) { e.preventDefault(); applyChanges(); };
+      if (importBtn && importInput) {
+        importBtn.onclick = function (e) {
+          e.preventDefault();
+          importInput.value = '';
+          importInput.click();
+        };
+        importInput.onchange = function () {
+          var file = importInput.files && importInput.files[0];
+          if (!file) return;
+          if (utils.isSupportedImportFile && !utils.isSupportedImportFile(file)) {
+            setStat('error', '请选择 HTML 或文本文件');
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function () {
+            textarea.value = String(reader.result || '');
+            isDirty = (textarea.value !== lastSavedContent);
+            updateLines();
+            updateHighlight();
+            if (previewToggle.checked) updatePrev();
+            setStat('success', '已导入 ' + file.name + ' — ' + textarea.value.length + ' 个字符');
+          };
+          reader.onerror = function () {
+            setStat('error', '读取失败: ' + file.name);
+          };
+          reader.readAsText(file, 'utf-8');
+        };
+      }
       if (formatBtn) formatBtn.onclick = function (e) { e.preventDefault();
-        try { var f = formatHTML(textarea.value); if (f) { textarea.value = f; updateLines(); updatePrev(); setStat('info','已格式化'); } } catch (err) { setStat('error','格式化失败: '+err.message); }
+        try { var f = formatHTML(textarea.value); if (f) { textarea.value = f; updateLines(); updateHighlight(); updateSearch(); updatePrev(); setStat('info','已格式化'); } } catch (err) { setStat('error','格式化失败: '+err.message); }
       };
+
+      if (findInput) findInput.oninput = function () { searchState.activeIndex = -1; updateSearch(true, true); };
+      if (caseToggle) caseToggle.onchange = function () { searchState.activeIndex = -1; updateSearch(true, true); };
+      if (findPrevBtn) findPrevBtn.onclick = function (e) { e.preventDefault(); goToMatch(-1, false); };
+      if (findNextBtn) findNextBtn.onclick = function (e) { e.preventDefault(); goToMatch(1, false); };
+      if (replaceOneBtn) replaceOneBtn.onclick = function (e) { e.preventDefault(); replaceCurrentMatch(); };
+      if (replaceAllBtn) replaceAllBtn.onclick = function (e) { e.preventDefault(); replaceAllMatches(); };
+      if (searchCloseBtn) searchCloseBtn.onclick = function (e) { e.preventDefault(); closeSearch(); };
+      if (findInput) findInput.onkeydown = handleSearchKeydown;
+      if (replaceInput) replaceInput.onkeydown = handleSearchKeydown;
 
       if (previewToggle) previewToggle.onchange = function () {
         if (this.checked) { previewPanel.classList.add('visible'); updatePrev(); } else { previewPanel.classList.remove('visible'); }
@@ -341,19 +287,135 @@
       textarea.addEventListener('input', function () {
         isDirty = (textarea.value !== lastSavedContent);
         updateLines();
+        updateHighlight();
+        if (searchBar.classList.contains('visible')) updateSearch();
         if (previewToggle.checked) updatePrev();
       });
-      textarea.addEventListener('scroll', function () { lineNumbers.scrollTop = textarea.scrollTop; });
+      textarea.addEventListener('scroll', syncEditorScroll);
       textarea.addEventListener('keydown', function (e) {
-        if (e.key === 'Tab') { e.preventDefault(); var s=textarea.selectionStart,ed=textarea.selectionEnd; textarea.value=textarea.value.substring(0,s)+'  '+textarea.value.substring(ed); textarea.selectionStart=textarea.selectionEnd=s+2; isDirty=true; updateLines(); }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && String(e.key || '').toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); openSearch(); return; }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && String(e.key || '').toLowerCase() === 'h') { e.preventDefault(); e.stopPropagation(); openSearch(true); return; }
+        if (e.key === 'Tab') { e.preventDefault(); var s=textarea.selectionStart,ed=textarea.selectionEnd; textarea.value=textarea.value.substring(0,s)+'  '+textarea.value.substring(ed); textarea.selectionStart=textarea.selectionEnd=s+2; isDirty=true; updateLines(); updateHighlight(); updateSearch(); if (previewToggle.checked) updatePrev(); }
         if (e.key === 'Enter' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); applyChanges(); }
-        if (e.key === 'Escape') { e.preventDefault(); closeEditor(); }
+        if (e.key === 'Escape') { e.preventDefault(); if (searchBar.classList.contains('visible')) closeSearch(); else closeEditor(); }
       });
       dialogEl.onclick = function (e) { if (e.target === dialogEl) closeEditor(); };
 
       function updateLines() { var lines=textarea.value.split('\n'),n=''; for(var i=1;i<=Math.max(lines.length,1);i++)n+=i+'\n'; lineNumbers.textContent=n; }
-      function updatePrev() { previewContent.innerHTML = sanitizeForWeChat(textarea.value); }
+      function updateHighlight() {
+        if (!highlightLayer) return;
+        if (utils.highlightHTMLSource) {
+          highlightLayer.innerHTML = utils.highlightHTMLSource(textarea.value);
+        } else {
+          highlightLayer.textContent = textarea.value || '\n';
+        }
+        syncEditorScroll();
+      }
+      function syncEditorScroll() {
+        lineNumbers.scrollTop = textarea.scrollTop;
+        if (highlightLayer) {
+          highlightLayer.scrollTop = textarea.scrollTop;
+          highlightLayer.scrollLeft = textarea.scrollLeft;
+        }
+      }
+      function updatePrev() {
+        try {
+          previewContent.innerHTML = utils.preparePreviewHTML ? utils.preparePreviewHTML(textarea.value) : sanitizeForWeChat(textarea.value);
+        } catch (err) {
+          previewContent.textContent = '预览渲染失败: ' + err.message;
+        }
+      }
+      function openSearch(focusReplace) {
+        searchBar.classList.add('visible');
+        var selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+        if (selected && selected.indexOf('\n') === -1) findInput.value = selected;
+        updateSearch(true, true);
+        setTimeout(function () {
+          var target = focusReplace ? replaceInput : findInput;
+          target.focus();
+          target.select();
+        }, 0);
+      }
+      function closeSearch() {
+        searchBar.classList.remove('visible');
+        textarea.focus();
+      }
+      function updateSearch(selectFirst, keepSearchFocus) {
+        var query = findInput.value;
+        searchState.matches = utils.findTextMatches ? utils.findTextMatches(textarea.value, query, { caseSensitive: caseToggle.checked }) : [];
+        if (!query || !searchState.matches.length) {
+          searchState.activeIndex = -1;
+          searchCount.textContent = query ? '0/0' : '0/0';
+          return;
+        }
+        if (searchState.activeIndex < 0 || searchState.activeIndex >= searchState.matches.length || selectFirst) {
+          searchState.activeIndex = findMatchIndexAtOrAfter(textarea.selectionStart);
+        }
+        selectMatch(searchState.activeIndex, keepSearchFocus);
+      }
+      function findMatchIndexAtOrAfter(position) {
+        for (var i = 0; i < searchState.matches.length; i++) {
+          if (searchState.matches[i].start >= position) return i;
+        }
+        return 0;
+      }
+      function selectMatch(index, keepSearchFocus) {
+        if (!searchState.matches.length) return;
+        var restoreFocus = keepSearchFocus && document.activeElement && document.activeElement !== textarea ? document.activeElement : null;
+        searchState.activeIndex = (index + searchState.matches.length) % searchState.matches.length;
+        var match = searchState.matches[searchState.activeIndex];
+        textarea.focus();
+        textarea.setSelectionRange(match.start, match.end);
+        scrollSelectionIntoView(match.start);
+        if (restoreFocus && restoreFocus.focus) restoreFocus.focus();
+        searchCount.textContent = (searchState.activeIndex + 1) + '/' + searchState.matches.length;
+      }
+      function scrollSelectionIntoView(offset) {
+        if (!utils.getScrollTopForTextOffset) return;
+        var lineHeight = parseFloat(window.getComputedStyle(textarea).lineHeight) || 22;
+        textarea.scrollTop = utils.getScrollTopForTextOffset(textarea.value, offset, {
+          lineHeight: lineHeight,
+          viewportHeight: textarea.clientHeight
+        });
+        syncEditorScroll();
+      }
+      function goToMatch(delta, keepSearchFocus) {
+        updateSearch(false, keepSearchFocus);
+        if (!searchState.matches.length) return;
+        selectMatch(searchState.activeIndex + delta, keepSearchFocus);
+      }
+      function replaceCurrentMatch() {
+        updateSearch();
+        if (!searchState.matches.length) return;
+        var match = searchState.matches[searchState.activeIndex];
+        var replacement = replaceInput.value;
+        textarea.value = textarea.value.slice(0, match.start) + replacement + textarea.value.slice(match.end);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        searchState.activeIndex = findMatchIndexAtOrAfter(match.start + replacement.length);
+        updateSearch();
+        setStat('info', '已替换 1 处');
+      }
+      function replaceAllMatches() {
+        updateSearch();
+        if (!searchState.matches.length) return;
+        var matches = searchState.matches.slice();
+        var replacement = replaceInput.value;
+        var value = textarea.value;
+        for (var i = matches.length - 1; i >= 0; i--) {
+          value = value.slice(0, matches[i].start) + replacement + value.slice(matches[i].end);
+        }
+        textarea.value = value;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        searchState.activeIndex = -1;
+        updateSearch();
+        setStat('info', '已替换 ' + matches.length + ' 处');
+      }
+      function handleSearchKeydown(e) {
+        if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goToMatch(-1, true) : goToMatch(1, true); }
+        if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
+      }
       function setStat(t,m){ statusEl.textContent=m; statusEl.className='wx-source-status '+t; }
+      updateHighlight();
     } catch (e) {
       console.error('[贰伴] bindDialogEvents error:', e);
     }
@@ -374,19 +436,12 @@
     if (statusEl) { statusEl.textContent = '正在读取编辑器内容...'; statusEl.className = 'wx-source-status'; }
     sendRequest('GET_CONTENT').then(
       function (html) {
-        // Auto-format on load (like 壹伴)
-        var formatted;
-        try {
-          formatted = formatHTML(html);
-        } catch (e) {
-          formatted = html;
-          console.error('[贰伴] auto-format failed:', e);
-        }
-        textarea.value = formatted;
-        lastSavedContent = formatted;
+        var loaded = utils.prepareLoadedHTML ? utils.prepareLoadedHTML(html) : String(html || '');
+        textarea.value = loaded;
+        lastSavedContent = loaded;
         isDirty = false;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        if (statusEl) { statusEl.textContent = '就绪 — 已格式化, ' + formatted.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
+        if (statusEl) { statusEl.textContent = '就绪 — 已格式化, ' + loaded.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
         textarea.focus();
       },
       function (err) {
@@ -433,6 +488,14 @@
   }
 
   function toggleEditor() { isDialogOpen ? closeEditor() : openEditor(); }
+
+  window.addEventListener('keydown', function (e) {
+    if (utils.isToggleShortcut && utils.isToggleShortcut(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleEditor();
+    }
+  }, true);
 
   // ============================================================
   //  Toast
