@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "贰伴",
-  "version": "2.0.9",
-  "description": "为微信公众号编辑器提供HTML源代码编辑功能，支持实时预览。By LogicMoriaty",
+  "version": "2.1.0",
+  "description": "微信公众号 HTML 源代码编辑器，支持源码格式化、导入、查找替换、语法高亮和手机式实时预览。",
   "permissions": ["storage"],
   "host_permissions": ["https://mp.weixin.qq.com/*"],
   "commands": {

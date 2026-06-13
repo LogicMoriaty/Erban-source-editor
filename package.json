@@ -1,4 +1,8 @@
 {
+  "name": "erban-source-editor",
+  "version": "2.1.0",
+  "private": true,
+  "description": "微信公众号 HTML 源代码编辑器扩展，支持源码格式化、导入、查找替换、语法高亮和手机式实时预览。",
   "scripts": {
     "test": "node --test tests/*.test.js"
   }
