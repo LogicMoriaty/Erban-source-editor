@@ -8,6 +8,7 @@ const {
   isToggleShortcut,
   isSupportedImportFile,
   mergeParagraphStyle,
+  prepareLoadedHTML,
   preparePreviewHTML
 } = require('../Erban-source-editor/lib/editor-utils.js');
 
@@ -38,6 +39,13 @@ test('accepts html, htm, and txt files for import', () => {
   assert.equal(isSupportedImportFile({ name: 'ARTICLE.HTM' }), true);
   assert.equal(isSupportedImportFile({ name: 'snippet.txt' }), true);
   assert.equal(isSupportedImportFile({ name: 'image.png' }), false);
+});
+
+test('keeps loaded editor html unchanged until the user explicitly formats it', () => {
+  const raw = '<p style="line-height:2.5;text-align:center"><span>你相信吗 ?</span></p>\n<section data-pm-slice="1 1 []">正文</section>';
+
+  assert.equal(prepareLoadedHTML(raw), raw);
+  assert.match(prepareLoadedHTML(raw), /line-height:2\.5/);
 });
 
 test('prepares preview html by removing active content and preserving layout styles', () => {

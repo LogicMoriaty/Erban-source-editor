@@ -27,6 +27,10 @@
     return /\.(html|htm|txt)$/.test(name);
   }
 
+  function prepareLoadedHTML(html) {
+    return String(html || '');
+  }
+
   function getInlineStyleValue(styleText, propName) {
     var parts = String(styleText || '').split(';');
     var target = String(propName || '').toLowerCase();
@@ -119,6 +123,7 @@
     isToggleShortcut: isToggleShortcut,
     isSupportedImportFile: isSupportedImportFile,
     mergeParagraphStyle: mergeParagraphStyle,
+    prepareLoadedHTML: prepareLoadedHTML,
     preparePreviewHTML: preparePreviewHTML
   };
 });

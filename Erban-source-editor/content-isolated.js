@@ -417,19 +417,12 @@
     if (statusEl) { statusEl.textContent = '正在读取编辑器内容...'; statusEl.className = 'wx-source-status'; }
     sendRequest('GET_CONTENT').then(
       function (html) {
-        // Auto-format on load (like 壹伴)
-        var formatted;
-        try {
-          formatted = formatHTML(html);
-        } catch (e) {
-          formatted = html;
-          console.error('[贰伴] auto-format failed:', e);
-        }
-        textarea.value = formatted;
-        lastSavedContent = formatted;
+        var loaded = utils.prepareLoadedHTML ? utils.prepareLoadedHTML(html) : String(html || '');
+        textarea.value = loaded;
+        lastSavedContent = loaded;
         isDirty = false;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        if (statusEl) { statusEl.textContent = '就绪 — 已格式化, ' + formatted.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
+        if (statusEl) { statusEl.textContent = '就绪 — 已读取, ' + loaded.length + ' 个字符'; statusEl.className = 'wx-source-status'; }
         textarea.focus();
       },
       function (err) {
